@@ -1,15 +1,16 @@
 (ns athens.common-events.bfs
   (:refer-clojure :exclude [descendants])
   (:require
-   [athens.common-db                     :as common-db]
-   [athens.common-events                 :as common-events]
-   [athens.common-events.graph.atomic    :as atomic]
-   [athens.common-events.graph.composite :as composite]
-   [athens.common-events.graph.ops       :as graph-ops]
-   [athens.common-events.resolver.atomic :as atomic-resolver]
-   [athens.common.utils                  :as common.utils]
-   [clojure.string                       :as string]
-   [clojure.walk                         :as walk]))
+    [athens.common-db                     :as common-db]
+    [athens.common-events                 :as common-events]
+    [athens.common-events.graph.atomic    :as atomic]
+    [athens.common-events.graph.composite :as composite]
+    [athens.common-events.graph.ops       :as graph-ops]
+    [athens.common-events.resolver.atomic :as atomic-resolver]
+    [athens.common.utils                  :as common.utils]
+    [clojure.string                       :as string]
+    [clojure.walk                         :as walk]))
+
 
 (defn enhance-block
   [block previous parent]
@@ -17,11 +18,13 @@
          {:parent parent}
          {:previous (select-keys previous [:block/uid])}))
 
+
 (defn parent-lookup
   [{:keys [page/title block/uid]}]
   (if title
     [:page/title title]
     [:block/uid uid]))
+
 
 (defn enhance-children
   [children parent]
@@ -34,11 +37,13 @@
        (remove nil?)
        vec))
 
+
 (defn- enhance-props
   [properties parent]
   (->> properties
        (map (fn [[k v]] (assoc v :parent (parent-lookup parent) :key k)))
        vec))
+
 
 (defn enhance-internal-representation
   "Enhance an internal representations' individual elements with a reference to parent and previous elements.
@@ -53,14 +58,15 @@
         pages          (or pages [])
         blocks'        (enhance-children blocks nil)]
     (walk/postwalk
-     (fn [x]
-       (if (map? x)
-         (let [{:block/keys [children properties]} x]
-           (cond-> x
-             children   (assoc :block/children (enhance-children children x))
-             properties (assoc :block/properties (enhance-props properties x))))
-         x))
-     (concat blocks' pages))))
+      (fn [x]
+        (if (map? x)
+          (let [{:block/keys [children properties]} x]
+            (cond-> x
+              children   (assoc :block/children (enhance-children children x))
+              properties (assoc :block/properties (enhance-props properties x))))
+          x))
+      (concat blocks' pages))))
+
 
 (defn enhanced-internal-representation->atomic-ops
   "Takes the enhanced internal representation and creates :page/new or :block/new and :block/save atomic events.
@@ -92,28 +98,31 @@
       (cond-> (into atomic-new-ops atomic-save-ops)
         (= open? false) (conj (atomic/make-block-open-op uid false))))))
 
+
 (defn move-save-ops-to-end
   [coll]
   (let [{save true
          not-save false} (group-by #(= (:op/type %) :block/save) coll)]
     (concat [] not-save save)))
 
+
 (defn add-missing-block-uids
   [internal-representation]
   (walk/postwalk
-   (fn [x]
-     (if (and (map? x)
+    (fn [x]
+      (if (and (map? x)
                ;; looks like a block
-              (or (:block/string x)
-                  (:block/properties x)
-                  (:block/children x)
-                  (:block/open? x))
+               (or (:block/string x)
+                   (:block/properties x)
+                   (:block/children x)
+                   (:block/open? x))
                ;; but doesn't have uid
-              (not (:block/uid x)))
+               (not (:block/uid x)))
         ;; add it
-       (assoc x :block/uid (common.utils/gen-block-uid))
-       x))
-   internal-representation))
+        (assoc x :block/uid (common.utils/gen-block-uid))
+        x))
+    internal-representation))
+
 
 (defn internal-representation->atomic-ops
   "Convert internal representation to the vector of atomic operations that would create it.
@@ -121,7 +130,7 @@
   [db internal-representation default-position]
   (when-not (or (vector? internal-representation)
                 (list? internal-representation))
-    (throw (ex-info "Internal representation must be a vector" {})))
+    (throw "Internal representation must be a vector"))
   (->> internal-representation
        add-missing-block-uids
        enhance-internal-representation
@@ -131,6 +140,7 @@
        distinct
        move-save-ops-to-end
        vec))
+
 
 (defn build-paste-op
   "For blocks creates `:block/new` and `:block/save` event and for page creates `:page/new`
@@ -180,6 +190,7 @@
                                     (cond-> ir-ops
                                       new-block-str? (conj block-save-op)
                                       empty-block? (conj remove-op))))))
+
 
 (defn db-from-repr
   [repr]

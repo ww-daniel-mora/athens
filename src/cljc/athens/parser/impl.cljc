@@ -5,16 +5,17 @@
   2nd pass: inline structure
   3rd pass: raw urls"
   (:require
-   [athens.common.logging :as log]
-   #?(:cljs [athens.config :as config])
-   [clojure.string :as string]
-   [clojure.walk :as walk]
-   #?(:cljs [instaparse.core :as insta :refer-macros [defparser]]
-      :clj [instaparse.core :as insta :refer [defparser]]))
+    [athens.common.logging :as log]
+    #?(:cljs [athens.config :as config])
+    [clojure.string :as string]
+    [clojure.walk :as walk]
+    #?(:cljs [instaparse.core :as insta :refer-macros [defparser]]
+       :clj [instaparse.core :as insta :refer [defparser]]))
   #?(:clj
      (:import
-      (java.time
-       LocalDateTime))))
+       (java.time
+         LocalDateTime))))
+
 
 (defparser block-parser
   "
@@ -36,6 +37,7 @@ code-text = #'.+' <newline>?
 space = ' '
 blankline = #'\\n\\n'
 newline = #'\\n'")
+
 
 (defparser inline-parser
   "(* inline spans parser, processes `:paragraph-text` from phase 1 *)
@@ -155,11 +157,13 @@ text-run = #'(?:[^\\*`\\^~\\[!<\\(\\#\\$\\{\\r\\n]|\\b[`!\\#\\$\\{])+'
 newline = #'\\n'
 ")
 
+
 (defn- transform-heading
   [atx p-text]
   [:heading {:n    (count atx)
              :from (str atx " " p-text)}
    [:paragraph-text (string/trim p-text)]])
+
 
 (defn- transform-indented-code-block
   [& code-texts]
@@ -170,20 +174,22 @@ newline = #'\\n'
                  (string/join "\n"))}
      [:code-text (string/join "\n" seconds)]]))
 
+
 (defn- transform-fenced-code-block
   [code-text]
   (let [lang (-> code-text
                  (string/split #"\n")
                  first)
         text (string/join
-              "\n"
-              (-> code-text
-                  (string/split #"\n")
-                  rest))]
+               "\n"
+               (-> code-text
+                   (string/split #"\n")
+                   rest))]
     (if (string/blank? text)
       [:fenced-code-block {:lang ""} lang]
       [:fenced-code-block {:lang lang}
        [:code-text text]])))
+
 
 (defn- transform-paragraph-text
   [& strings]
@@ -191,12 +197,15 @@ newline = #'\\n'
                         (map string/triml)
                         (string/join "\n"))])
 
+
 (declare block-parser->ast)
+
 
 (defn- transform-block-quote
   [& strings]
   (into [:block-quote]
         (rest (block-parser->ast (string/join "\n" strings)))))
+
 
 (def stage-1-transformations
   {:heading             transform-heading
@@ -205,12 +214,14 @@ newline = #'\\n'
    :paragraph-text      transform-paragraph-text
    :block-quote         transform-block-quote})
 
+
 (defn block-parser->ast
   "Stage 1. Parse `in` string with `block-parser`."
   [in]
   (->> in
        (insta/parse block-parser)
        (insta/transform stage-1-transformations)))
+
 
 (defn- string-representation
   [& contents]
@@ -222,6 +233,7 @@ newline = #'\\n'
                     second
                     :from))))
        string/join))
+
 
 (defn- block-ref-transform
   [& contents]
@@ -236,6 +248,7 @@ newline = #'\\n'
                               title? (assoc :title title))]
            contents)))
 
+
 (defn- page-link-transform
   [& contents]
   (let [title?   (= :title (ffirst contents))
@@ -249,15 +262,18 @@ newline = #'\\n'
                               title? (assoc :title title))]
            contents)))
 
+
 (defn- hashtag-braced-transform
   [& contents]
   (apply conj [:hashtag {:from (str "#[[" (apply string-representation contents) "]]")}]
          contents))
 
+
 (defn- hashtag-naked-transform
   [& contents]
   (apply conj [:hashtag {:from (str "#" (string/join contents))}]
          contents))
+
 
 (defn- walker-hlb-candidate
   [candidate?]
@@ -286,6 +302,7 @@ newline = #'\\n'
             (reset! candidate? false)
             x)))
       x)))
+
 
 (defn- inline-transform
   [& contents]
@@ -317,6 +334,7 @@ newline = #'\\n'
                                    [])))]
     result))
 
+
 (defn- link-parts->map
   [link-parts]
   (let [safe-parts (->> link-parts
@@ -331,12 +349,14 @@ newline = #'\\n'
                       (string/join link-target-rest))]
     (assoc safe-parts :link-target link-target)))
 
+
 (defn- link-transform
   [& link-parts]
   (let [{:keys [link-text link-target link-title]} (link-parts->map link-parts)]
     [:link (cond-> {:text   link-text
                     :target link-target}
              link-title (assoc :title link-title))]))
+
 
 (defn- image-transform
   [& link-parts]
@@ -345,12 +365,14 @@ newline = #'\\n'
                          :src link-target}
                   link-title (assoc :title link-title))]))
 
+
 (defn- autolink-transform
   [url]
   [:autolink {:text   url
               :target (if (string/includes? url "@")
                         (str "mailto:" url)
                         url)}])
+
 
 (defn- component-transform
   [contents]
@@ -368,6 +390,7 @@ newline = #'\\n'
                 contents)
    contents])
 
+
 (def stage-2-internal-transformations
   {:block-ref      block-ref-transform
    :page-link      page-link-transform
@@ -379,6 +402,7 @@ newline = #'\\n'
    :autolink       autolink-transform
    :component      component-transform})
 
+
 (defn inline-parser->ast
   [in]
   (let [parse-result (insta/parse inline-parser in)]
@@ -388,11 +412,14 @@ newline = #'\\n'
       [:paragraph
        [:text-run in]])))
 
+
 (def stage-2-transformations
   {:paragraph-text inline-parser->ast})
 
+
 (def uri-pattern
   #"(?i)(https?|ftp)://[^\s/\$\.\?\#].[^\s]*")
+
 
 (defn- append-link
   ([acc before uri] (append-link acc before uri nil))
@@ -409,6 +436,7 @@ newline = #'\\n'
      (and (seq after)
           (pos? (count after)))
      (conj after))))
+
 
 (defn- text-run-transform
   [text-run]
@@ -431,6 +459,7 @@ newline = #'\\n'
                   (append-link acc before uri after)))))
       text-run)))
 
+
 (def stage-3-transformations
   {:text-run        text-run-transform
    ;; TODO move below transformations to rendering when we're sure to use this parser
@@ -444,6 +473,7 @@ newline = #'\\n'
                       (apply conj [:blockquote] contents))
    :code-span       (fn [text]
                       [:inline-pre-formatted text])})
+
 
 (defn- timed
   [name fn-to-time]
@@ -463,6 +493,7 @@ newline = #'\\n'
            (log/info name ", time:" (/ (- t-1 t-0)
                                        1000000) "milliseconds"))
          result))))
+
 
 (defn staged-parser->ast
   [in]
