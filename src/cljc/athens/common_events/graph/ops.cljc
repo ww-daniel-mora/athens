@@ -1,13 +1,12 @@
 (ns athens.common-events.graph.ops
   "Building (including contextual resolution) Graph Ops like a boss."
   (:require
-    [athens.common-db                     :as common-db]
-    [athens.common-events.graph.atomic    :as atomic]
-    [athens.common-events.graph.composite :as composite]
-    [athens.common.utils                  :as common.utils]
-    [athens.parser.structure              :as structure]
-    [clojure.set                          :as set]))
-
+   [athens.common-db                     :as common-db]
+   [athens.common-events.graph.atomic    :as atomic]
+   [athens.common-events.graph.composite :as composite]
+   [athens.common.utils                  :as common.utils]
+   [athens.parser.structure              :as structure]
+   [clojure.set                          :as set]))
 
 (defn build-location-op
   "Creates composite op with `:page/new` for any missing page in location.
@@ -25,7 +24,6 @@
                                        true           (conj original-op)))
       original-op)))
 
-
 (defn build-page-new-op
   "Creates `:page/new` & optionally `:block/new` ops.
   If page already exists, just creates atomic `:block/new`.
@@ -37,7 +35,6 @@
                                                  :relation  :first})]
      (->> (atomic/make-block-new-op block-uid location)
           (build-location-op db location)))))
-
 
 (defn build-page-rename-op
   "Creates `:page/rename` & optionally `:page/new` ops."
@@ -59,18 +56,15 @@
                                                               atomic-rename)))]
     page-rename-op))
 
-
 (defn build-block-new-op
   [db block-uid location]
   (->> (atomic/make-block-new-op block-uid location)
        (build-location-op db location)))
 
-
 (defn build-block-move-op
   [db block-uid position]
   (->> (atomic/make-block-move-op block-uid position)
        (build-location-op db position)))
-
 
 (defn build-block-save-op
   "Creates `:block/save` op, taking into account context.
@@ -94,13 +88,11 @@
                                                                atomic-save)))]
     block-save-op))
 
-
 (defn build-block-remove-op
   "Creates `:block/remove` op."
   [db delete-uid]
   (when (common-db/e-by-av db :block/uid delete-uid)
     (atomic/make-block-remove-op delete-uid)))
-
 
 (defn build-block-merge-with-updated-op
   "Creates `:block/remove` & `:block/save` ops."
@@ -121,7 +113,6 @@
                                                                    [block-remove-op
                                                                     block-save-op]))]
     delete-and-merge-op))
-
 
 (defn build-block-remove-merge-op
   "Creates `:block/remove` & `:block/save` ops.
@@ -152,17 +143,15 @@
                                                                     block-save-op]))]
     delete-and-merge-op))
 
-
 (defn atomic-composite?
   [event]
   (or
     ;; semantic event
-    (and (= :op/atomic (:event/type event))
-         (= :composite/consequence (-> event :event/op :op/type)))
+   (and (= :op/atomic (:event/type event))
+        (= :composite/consequence (-> event :event/op :op/type)))
     ;; atomic graph op
-    (and (contains? event :op/atomic?)
-         (not (:op/atomic? event)))))
-
+   (and (contains? event :op/atomic?)
+        (not (:op/atomic? event)))))
 
 (defn extract-atomics
   [operation]
@@ -177,13 +166,11 @@
                     [(or (:event/op operation)
                          operation)]))))
 
-
 (defn contains-op?
   [op op-type]
   (let [atomics  (extract-atomics op)
         filtered (filter #(= op-type (:op/type %)) atomics)]
     (seq filtered)))
-
 
 (defn- split-props-from-blocks
   [db uids]
@@ -192,7 +179,6 @@
                    :blocks)
         {:keys [props blocks]} (group-by group-f uids)]
     [props blocks]))
-
 
 (defn block-move-chain
   [db target-uid source-uids first-rel]
@@ -210,7 +196,6 @@
                                              (atomic/make-block-move-op two
                                                                         {:block/uid one
                                                                          :relation :after}))))))
-
 
 (defn build-block-split-op
   "Creates `:block/split` composite op, taking into account context.
@@ -241,7 +226,6 @@
                                                             children? (conj close-new-block-op)))]
     split-block-op))
 
-
 (defn ops->new-page-titles
   "Reduces Graph Ops into a set of titles of newly created pages."
   [ops]
@@ -252,7 +236,6 @@
                           set)]
     new-titles))
 
-
 (defn ops->new-block-uids
   "Reduces Graph Ops into a set of block/uids of newly created blocks."
   [ops]
@@ -262,7 +245,6 @@
                            (map :block/new)
                            set)]
     new-uids))
-
 
 (defn structural-diff
   "Calculates removed and added links (block refs & page links)"
@@ -311,11 +293,9 @@
         added-links          (set/difference new-links old-links)]
     [removed-links added-links]))
 
-
 (defn throw-unknown-k
   [k]
-  (throw (str "Key " k " must be either string or ::first/::last.")))
-
+  (throw (ex-info (str "Key " k " must be either string or ::first/::last.") {})))
 
 (defn- new-prop
   [db [a v :as uid-or-eid] next-uid k]
@@ -335,7 +315,6 @@
                           {:page/title title}
                           {:block/uid uid}))]
     (build-block-new-op db next-uid position)))
-
 
 (defn build-path
   "Return uid at ks path and operations to create path, if needed, as [uid ops].
@@ -360,7 +339,6 @@
            ops'       (cond-> ops
                         (not next-block) (conj (new-prop db uid-or-eid next-uid k)))]
        (recur db next-uid ks ops')))))
-
 
 (defn get-path
   "Return uid at ks path."

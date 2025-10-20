@@ -1,17 +1,15 @@
 (ns athens.types.query.shared
   (:require
-    [athens.common-events.graph.ops :as graph-ops]
-    [athens.db :as db]
-    [athens.views.blocks.editor                 :as editor]
-    [re-frame.core :as rf]
-    [reagent.core :as r]))
-
+   [athens.common-events.graph.ops :as graph-ops]
+   [athens.db :as db]
+   [athens.views.blocks.editor                 :as editor]
+   [re-frame.core :as rf]
+   [reagent.core :as r]))
 
 (defn get-root-page
   [x]
   (merge x
          {":task/page" (:node/title (db/get-root-parent-page (get x ":block/uid")))}))
-
 
 (defn parse-for-title
   "should be able to pass in a plain string, a wikilink, or both?"
@@ -20,9 +18,8 @@
     (let [re #"\[\[(.*)\]\]"]
       (cond
         (re-find re s) (second (re-find re s))
-        (clojure.string/blank? s) (throw "parse-for-title got an empty string")
+        (clojure.string/blank? s) (throw (ex-info "parse-for-title got an empty string" {}))
         :else s))))
-
 
 (defn parse-for-uid
   "should be able to pass in a plain string, a wikilink, or both?"
@@ -31,22 +28,19 @@
     (let [re #"\(\((.*)\)\)"]
       (cond
         (re-find re s) (second (re-find re s))
-        (clojure.string/blank? s) (throw "parse-for-title got an empty string")
+        (clojure.string/blank? s) (throw (ex-info "parse-for-title got an empty string" {}))
         :else s))))
-
 
 (defn get-create-auth-and-time
   [create-event]
   {":create/auth" (get-in create-event [:event/auth :presence/id])
    ":create/time" (get-in create-event [:event/time :time/ts])})
 
-
 (defn get-last-edit-auth-and-time
   [edit-events]
   (let [last-edit (last edit-events)]
     {":last-edit/auth" (get-in last-edit [:event/auth :presence/id])
      ":last-edit/time" (get-in last-edit [:event/time :time/ts])}))
-
 
 (defn block-to-flat-map
   [block]
@@ -70,13 +64,11 @@
         (prn (get merged-map ":task/title") uid children))
     merged-map))
 
-
 (defn update-card-field
   [id k new-value]
   (rf/dispatch [:graph/update-in [:block/uid id] [k]
                 (fn [db prop-uid]
                   [(graph-ops/build-block-save-op db prop-uid new-value)])]))
-
 
 (defn title-editor
   [uid title]
