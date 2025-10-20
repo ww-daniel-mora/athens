@@ -15,9 +15,7 @@
    [re-frame.core           :as rf]
    [reagent.core            :as r]))
 
-
 (declare parse-and-render)
-
 
 (def fm-props
   {:as "b"
@@ -25,7 +23,6 @@
    :whiteSpace "nowrap"
    :fontWeight "normal"
    :opacity "0.3"})
-
 
 (def link-props
   {:color "link"
@@ -41,7 +38,6 @@
    :fontSize "inherit"
    :fontWeight "inherit"
    :textDecoration "none"})
-
 
 (defn page-link-el
   []
@@ -69,7 +65,6 @@
                                        :opacity "0.3"})}}]
           (r/children this))))
 
-
 (defn parse-title
   "Title coll is a sequence of plain strings or hiccup elements. If string, return string, otherwise parse the hiccup
   for its plain-text representation."
@@ -79,7 +74,6 @@
                 el
                 (str "[[" (str/join (get-in el [2 2])) "]]"))) title-coll)
        (str/join "")))
-
 
 (defn render-page-link
   "Renders a page link given the title of the page."
@@ -118,7 +112,6 @@
            title-coll))
    [:span {:class "fmt"} "]]"]])
 
-
 ;; -- Component ---
 
 (def components
@@ -129,7 +122,6 @@
    #"SELF"                        :self
    #"\[\[embed\]\]: \(\(.+\)\)"   :block-embed})
 
-
 (defmulti component
   (fn [content _uid]
     (some (fn [[pattern render]]
@@ -137,14 +129,11 @@
               render))
           components)))
 
-
 (defmethod component :default
   [content _]
   [:button content])
 
-
 ;; Components
-
 
 (defn- clean-single-p-appending
   [parent & contents]
@@ -154,238 +143,205 @@
       (apply conj parent rest-of-p))
     (apply conj parent contents)))
 
-
 ;; Instaparse transforming docs: https://github.com/Engelberg/instaparse#transforming-the-tree
 (defn transform
   "Transforms Instaparse output to Hiccup."
   [tree uid]
   (insta/transform
-    {:block   (fn [& contents]
-                (apply clean-single-p-appending
-                       [:span {:class "block"}]
-                       contents))
-     :heading (fn [{n :n} & contents]
-                (apply clean-single-p-appending
-                       [({1 :h1
-                          2 :h2
-                          3 :h3
-                          4 :h4
-                          5 :h5
-                          6 :h6} n)]
-                       contents))
+   {:block   (fn [& contents]
+               (apply clean-single-p-appending
+                      [:span {:class "block"}]
+                      contents))
+    :heading (fn [{n :n} & contents]
+               (apply clean-single-p-appending
+                      [({1 :h1
+                         2 :h2
+                         3 :h3
+                         4 :h4
+                         5 :h5
+                         6 :h6} n)]
+                      contents))
 
      ;; for more information regarding how custom components are parsed, see
      ;; https://athensresearch.gitbook.io/handbook/athens/athens-components-documentation/
-     :component            (fn [& contents]
-                             (let [content (first contents)]
-                               ^{:key content}
-                               [component (first contents) uid]))
-     :page-link            (fn [{_from :from :as attr} & title-coll]
-                             (render-page-link attr title-coll))
-     :hashtag              (fn [{_from :from} & title-coll]
-                             [:> Button (merge link-props
-                                               {:variant    "link"
-                                                :class      "hashtag"
-                                                :color      "inherit"
-                                                :fontWeight "inherit"
-                                                :_hover     {:textDecoration "none"}
-                                                :onClick    (fn [e]
-                                                              (let [parsed-title (parse-title title-coll)
-                                                                    shift?       (.-shiftKey e)]
-                                                                (rf/dispatch [:reporting/navigation {:source :pr-hashtag
-                                                                                                     :target :hashtag
-                                                                                                     :pane   (if shift?
-                                                                                                               :right-pane
-                                                                                                               :main-pane)}])
-                                                                (router/navigate-page parsed-title e)))})
-                              [:> Text fm-props "#"]
-                              [:span {:class "contents"} title-coll]])
-     :block-ref            (fn [{_from :from :as attr} ref-uid]
-                             (let [block      (reactive/get-reactive-block-or-page-by-uid ref-uid)
-                                   block-type (reactive/reactive-get-entity-type [:block/uid ref-uid])
-                                   ff         @(rf/subscribe [:feature-flags])
-                                   renderer-k (block-type-dispatcher/block-type->protocol-k block-type ff)
-                                   renderer   (block-type-dispatcher/block-type->protocol renderer-k {})]
-                               ^{:key renderer-k}
-                               [types/inline-ref-view renderer block attr ref-uid uid {} true]))
-     :url-image            (fn [{url :src alt :alt}]
-                             [:> Box {:class        "url-image"
-                                      :as           "img"
-                                      :borderRadius "md"
-                                      :alt          alt
-                                      :src          url}])
-     :url-link             (fn [{url :url} text]
-                             [:> Button
-                              (merge link-props {:class  "url-link"
-                                                 :href   url
-                                                 :target "_blank"})
-                              text])
-     :link                 (fn [{:keys [text target title]}]
-                             [:> Button (cond-> (merge link-props
-                                                       {:class  "url-link contents"
-                                                        :as "a"
-                                                        :href target
-                                                        :target "_blank"})
-                                          (string? title)
-                                          (assoc :title title))
-                              text])
-     :autolink             (fn [{:keys [text target]}]
-                             [:<>
-                              [:> Text fm-props "<"]
-                              [:> Link (merge
-                                         link-props
-                                         {:class  "autolink contents"
-                                          :href   target
-                                          :target "_blank"})
-                               text]
-                              [:> Text fm-props ">"]])
-     :text-run             (fn [& contents]
-                             (apply conj [:span {:class "text-run"}] contents))
-     :paragraph            (fn [& contents]
-                             (apply conj [:p] contents))
-     :bold                 (fn [& contents]
-                             (apply conj [:strong {:class "contents bold"}] contents))
-     :italic               (fn [& contents]
-                             (apply conj [:i {:class "contents italic"}] contents))
-     :strikethrough        (fn [& contents]
-                             (apply conj  [:del {:class "contents del"}] contents))
-     :underline            (fn [& contents]
-                             (apply conj  [:u {:class "contents underline"}] contents))
-     :highlight            (fn [& contents]
-                             (apply conj [:mark {:class "contents highlight"}] contents))
-     :pre-formatted        (fn [text]
-                             [:code text])
-     :inline-pre-formatted (fn [text]
-                             [:code text])
-     :indented-code-block  (fn [{:keys [_from]} code-text]
-                             (let [text (second code-text)]
-                               [:pre
-                                [:code text]]))
-     :fenced-code-block    (fn [{lang :lang} code-text]
-                             (let [mode (or lang "javascript")
-                                   text (second code-text)]
-                               (when config/debug?
-                                 (js/console.log "Block code, original-mode:" lang
-                                                 ", mode:" mode
-                                                 ", text:" text))
-                               [:pre
-                                [:code text]]
-                               ;; TODO: Followup issue: #989 "Integrate with CodeMirror for code blocks"
-                               #_[:> CodeMirror {:value     text
-                                                :options   {:mode              mode
-                                                            :lineNumbers       true
-                                                            :matchBrackets     true
-                                                            :autoCloseBrackets true
-                                                            :extraKeys         #js {"Esc" (fn [editor]
-                                                                                            ;; TODO: save when needed
-                                                                                            (js/console.log "[Esc]")
-                                                                                            (if (= text @local-value)
-                                                                                              (js/console.log "[Esc] no changes")
-                                                                                              (do
-                                                                                                ;; TODO Save
-                                                                                                )))}}
-                                                :on-change (fn [editor data value]
-                                                             (js/console.log "on-change" editor (pr-str data) (pr-str value))
-                                                             (when-not (= @local-value value)
-                                                               (js/console.log "on-change, updating local state" value)
-                                                               (reset! local-value value)))
-                                                :on-blur   (fn [editor event]
-                                                             (js/console.log "on-blur")
-                                                             (if (= text @local-value)
-                                                               (js/console.log "on-blur, content not modified")
-                                                               (do
-                                                                 (js/console.log "on-blur, content modified"
-                                                                                 (pr-str text)
-                                                                                 "=>"
-                                                                                 (pr-str @local-value))
-                                                                 ;; update value based on `uid`
-                                                                 )))}]))
+    :component            (fn [& contents]
+                            (let [content (first contents)]
+                              ^{:key content}
+                              [component (first contents) uid]))
+    :page-link            (fn [{_from :from :as attr} & title-coll]
+                            (render-page-link attr title-coll))
+    :hashtag              (fn [{_from :from} & title-coll]
+                            [:> Button (merge link-props
+                                              {:variant    "link"
+                                               :class      "hashtag"
+                                               :color      "inherit"
+                                               :fontWeight "inherit"
+                                               :_hover     {:textDecoration "none"}
+                                               :onClick    (fn [e]
+                                                             (let [parsed-title (parse-title title-coll)
+                                                                   shift?       (.-shiftKey e)]
+                                                               (rf/dispatch [:reporting/navigation {:source :pr-hashtag
+                                                                                                    :target :hashtag
+                                                                                                    :pane   (if shift?
+                                                                                                              :right-pane
+                                                                                                              :main-pane)}])
+                                                               (router/navigate-page parsed-title e)))})
+                             [:> Text fm-props "#"]
+                             [:span {:class "contents"} title-coll]])
+    :block-ref            (fn [{_from :from :as attr} ref-uid]
+                            (let [block      (reactive/get-reactive-block-or-page-by-uid ref-uid)
+                                  block-type (reactive/reactive-get-entity-type [:block/uid ref-uid])
+                                  ff         @(rf/subscribe [:feature-flags])
+                                  renderer-k (block-type-dispatcher/block-type->protocol-k block-type ff)
+                                  renderer   (block-type-dispatcher/block-type->protocol renderer-k {})]
+                              ^{:key renderer-k}
+                              [types/inline-ref-view renderer block attr ref-uid uid {} true]))
+    :url-image            (fn [{url :src alt :alt}]
+                            [:> Box {:class        "url-image"
+                                     :as           "img"
+                                     :borderRadius "md"
+                                     :alt          alt
+                                     :src          url}])
+    :url-link             (fn [{url :url} text]
+                            [:> Button
+                             (merge link-props {:class  "url-link"
+                                                :href   url
+                                                :target "_blank"})
+                             text])
+    :link                 (fn [{:keys [text target title]}]
+                            [:> Button (cond-> (merge link-props
+                                                      {:class  "url-link contents"
+                                                       :as "a"
+                                                       :href target
+                                                       :target "_blank"})
+                                         (string? title)
+                                         (assoc :title title))
+                             text])
+    :autolink             (fn [{:keys [text target]}]
+                            [:<>
+                             [:> Text fm-props "<"]
+                             [:> Link (merge
+                                       link-props
+                                       {:class  "autolink contents"
+                                        :href   target
+                                        :target "_blank"})
+                              text]
+                             [:> Text fm-props ">"]])
+    :text-run             (fn [& contents]
+                            (apply conj [:span {:class "text-run"}] contents))
+    :paragraph            (fn [& contents]
+                            (apply conj [:p] contents))
+    :bold                 (fn [& contents]
+                            (apply conj [:strong {:class "contents bold"}] contents))
+    :italic               (fn [& contents]
+                            (apply conj [:i {:class "contents italic"}] contents))
+    :strikethrough        (fn [& contents]
+                            (apply conj  [:del {:class "contents del"}] contents))
+    :underline            (fn [& contents]
+                            (apply conj  [:u {:class "contents underline"}] contents))
+    :highlight            (fn [& contents]
+                            (apply conj [:mark {:class "contents highlight"}] contents))
+    :pre-formatted        (fn [text]
+                            [:code text])
+    :inline-pre-formatted (fn [text]
+                            [:code text])
+    :indented-code-block  (fn [{:keys [_from]} code-text]
+                            (let [text (second code-text)]
+                              [:pre
+                               [:code text]]))
+    :fenced-code-block    (fn [{lang :lang} code-text]
+                            (let [mode (or lang "javascript")
+                                  text (second code-text)]
+                              (when config/debug?
+                                (js/console.log "Block code, original-mode:" lang
+                                                ", mode:" mode
+                                                ", text:" text))
+                              [:pre
+                               [:code text]]))
 
-     :latex   (fn [text]
-                [:span {:ref (fn [el]
-                               (when el
-                                 (try
-                                   (katex/render text el (clj->js
-                                                           {:throwOnError false}))
-                                   (catch :default e
-                                     (js/console.warn "Unexpected KaTeX error" e)
-                                     (aset el "innerHTML" text)))))}])
-     :newline (fn [_]
-                [:br])}
-    tree))
-
+    :latex   (fn [text]
+               [:span {:ref (fn [el]
+                              (when el
+                                (try
+                                  (katex/render text el (clj->js
+                                                         {:throwOnError false}))
+                                  (catch :default e
+                                    (js/console.warn "Unexpected KaTeX error" e)
+                                    (aset el "innerHTML" text)))))}])
+    :newline (fn [_]
+               [:br])}
+   tree))
 
 (defn transform->text
   "Transforms Instaparse output to Hiccup."
   [tree]
   (insta/transform
-    {:block   (fn [& contents]
-                (str/join contents))
-     :heading (fn [{n :n} & contents]
-                (str (str/join (repeat n "*"))
-                     " "
-                     (str/join contents)))
+   {:block   (fn [& contents]
+               (str/join contents))
+    :heading (fn [{n :n} & contents]
+               (str (str/join (repeat n "*"))
+                    " "
+                    (str/join contents)))
 
      ;; for more information regarding how custom components are parsed, see
      ;; https://athensresearch.gitbook.io/handbook/athens/athens-components-documentation/
-     :component            (fn [& contents]
-                             (let [content (first contents)]
-                               (str "{{" content ":" (str/join (rest contents)) "}}")))
-     :page-link            (fn [_ & title-coll]
-                             (str "[[" (str/join title-coll) "]]"))
-     :hashtag              (fn [{_from :from} & title-coll]
-                             (str "#" (str/join title-coll)))
-     :block-ref            (fn [{_from :from :as attr} ref-uid]
-                             (let [block      (reactive/get-reactive-block-or-page-by-uid ref-uid)
-                                   block-type (reactive/reactive-get-entity-type [:block/uid ref-uid])
-                                   ff         @(rf/subscribe [:feature-flags])
-                                   renderer-k (block-type-dispatcher/block-type->protocol-k block-type ff)
-                                   renderer   (block-type-dispatcher/block-type->protocol renderer-k {})]
-                               (str "((" (types/text-view renderer block attr) "))")))
-     :url-image            (fn [{url :src alt :alt}]
-                             (str "![" alt "](" url ")"))
-     :url-link             (fn [{url :url} text]
-                             (str "[" text "](" url ")"))
-     :link                 (fn [{:keys [text target title]}]
-                             (str "[" title "](" target
-                                  (when (string? text)
-                                    (str " " text))
-                                  ")"))
-     :autolink             (fn [{:keys [text _target]}]
-                             (str "<" text ">"))
-     :text-run             (fn [& contents]
-                             (str/join contents))
-     :paragraph            (fn [& contents]
-                             (str/join contents))
-     :bold                 (fn [& contents]
-                             (str "*" (str/join contents) "*"))
-     :italic               (fn [& contents]
-                             (str "**" (str/join contents) "**"))
-     :strikethrough        (fn [& contents]
-                             (str "~~" (str/join contents) "~~"))
-     :underline            (fn [& contents]
-                             (str "__" (str/join contents) "__"))
-     :highlight            (fn [& contents]
-                             (str "^^" (str/join contents) "^^"))
-     :pre-formatted        (fn [text]
-                             (str "`" text "`"))
-     :inline-pre-formatted (fn [text]
-                             (str "`" text "`"))
-     :indented-code-block  (fn [{:keys [_from]} code-text]
-                             (->> code-text
-                                  (map #(str "    " %))
-                                  (str/join "\n")))
-     :fenced-code-block    (fn [{lang :lang} code-text]
-                             (let [text (second code-text)]
-                               (str "```" lang "\n"
-                                    text "\n```")))
+    :component            (fn [& contents]
+                            (let [content (first contents)]
+                              (str "{{" content ":" (str/join (rest contents)) "}}")))
+    :page-link            (fn [_ & title-coll]
+                            (str "[[" (str/join title-coll) "]]"))
+    :hashtag              (fn [{_from :from} & title-coll]
+                            (str "#" (str/join title-coll)))
+    :block-ref            (fn [{_from :from :as attr} ref-uid]
+                            (let [block      (reactive/get-reactive-block-or-page-by-uid ref-uid)
+                                  block-type (reactive/reactive-get-entity-type [:block/uid ref-uid])
+                                  ff         @(rf/subscribe [:feature-flags])
+                                  renderer-k (block-type-dispatcher/block-type->protocol-k block-type ff)
+                                  renderer   (block-type-dispatcher/block-type->protocol renderer-k {})]
+                              (str "((" (types/text-view renderer block attr) "))")))
+    :url-image            (fn [{url :src alt :alt}]
+                            (str "![" alt "](" url ")"))
+    :url-link             (fn [{url :url} text]
+                            (str "[" text "](" url ")"))
+    :link                 (fn [{:keys [text target title]}]
+                            (str "[" title "](" target
+                                 (when (string? text)
+                                   (str " " text))
+                                 ")"))
+    :autolink             (fn [{:keys [text _target]}]
+                            (str "<" text ">"))
+    :text-run             (fn [& contents]
+                            (str/join contents))
+    :paragraph            (fn [& contents]
+                            (str/join contents))
+    :bold                 (fn [& contents]
+                            (str "*" (str/join contents) "*"))
+    :italic               (fn [& contents]
+                            (str "**" (str/join contents) "**"))
+    :strikethrough        (fn [& contents]
+                            (str "~~" (str/join contents) "~~"))
+    :underline            (fn [& contents]
+                            (str "__" (str/join contents) "__"))
+    :highlight            (fn [& contents]
+                            (str "^^" (str/join contents) "^^"))
+    :pre-formatted        (fn [text]
+                            (str "`" text "`"))
+    :inline-pre-formatted (fn [text]
+                            (str "`" text "`"))
+    :indented-code-block  (fn [{:keys [_from]} code-text]
+                            (->> code-text
+                                 (map #(str "    " %))
+                                 (str/join "\n")))
+    :fenced-code-block    (fn [{lang :lang} code-text]
+                            (let [text (second code-text)]
+                              (str "```" lang "\n"
+                                   text "\n```")))
 
-     :latex   (fn [text]
-                (str "$$" text "$$"))
-     :newline (fn [_]
-                "\n")}
-    tree))
-
+    :latex   (fn [text]
+               (str "$$" text "$$"))
+    :newline (fn [_]
+               "\n")}
+   tree))
 
 (defn parse-and-render
   "Converts a string of block syntax to Hiccup, with fallback formatting if it can’t be parsed."
@@ -413,7 +369,6 @@
           (js/console.log "view creation:" vt-total)
           (js/console.groupEnd))
         view))))
-
 
 (defn parse-to-text
   [string]

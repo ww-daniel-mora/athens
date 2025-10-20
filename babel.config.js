@@ -59,8 +59,8 @@ module.exports = {
         preventFullImport: true
       }
     }],
-    ["@babel/proposal-class-properties"],
-    ["@babel/proposal-object-rest-spread"],
+    ["@babel/plugin-transform-class-properties"],
+    ["@babel/plugin-transform-object-rest-spread"],
     // Import helpers from @babel/runtime instead of duplicating them everywhere.
     "@babel/plugin-transform-runtime",
     // Better debug information for styled components.
